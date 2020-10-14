@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-
+Calcule pi en créant des points aléatoires dans [0,1]² et en vérifiant s'ils
+sont dans le cercle ((0,0),1).
 """
 from random import random
 from modules import arg_parse

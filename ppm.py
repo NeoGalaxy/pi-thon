@@ -1,6 +1,7 @@
 """
 Module qui gère les images PPM
 """
+from modules import better_io
 
 class Image:
     """Classe créant et gérant une image"""
@@ -26,7 +27,8 @@ class Image:
         """write designated points into the file"""
         width, height = self.dimensions
         header = f"P3\n{width} {height}\n{color_res}\n"
-        file = open(path, 'w', buffering = 100 + 12 * width * height + len(header))
+        file = open(path, 'w',
+            buffering = 100 + 12 * width * height + len(header))
         file.write(header)
         color_modif = color_res/255
         str_groups = [
@@ -39,13 +41,23 @@ class Image:
                 file.write(str_groups[pix] + ' ')
         file.close()
 
-    def export_bin(self, path):
+    def export_bin(self, path, progress = False,
+                   pre_text = 'Generation image: '):
         """write designated points into the file"""
         width, height = self.dimensions
         header = (f"P6\n{width} {height} 255 ").encode('ASCII')
         file = open(path, 'wb', buffering = 100 + width * height + len(header))
         file.write(header)
+        #progress_bar = better_io.Progress(width * height, pre_text = pre_text, fps = 1)
+        index = 0
         for line in self.picture:
             for pix in line:
                 file.write(bytes(self.groups_color[pix]))
+                index += 1
+                #progress_bar.set(index)
         file.close()
+        #progress_bar.stop(False)
+
+if __name__ == '__main__':
+    img = Image((3000,3000))
+    img.export_bin('img.ppm')

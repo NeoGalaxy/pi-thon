@@ -93,11 +93,11 @@ class Parser:
                 text += '\n'
         return text
 
-    def parse_arguments(self, arguments = None) :
-        """Parse the arguments"""
-        if arguments is None:
-            arguments = sys.argv
-        if arguments is sys.argv and self.arguments is not None :
+    def parse_arguments(self, argument_list = None) :
+        """Parse the argument_list"""
+        if argument_list is None:
+            argument_list = sys.argv
+        if argument_list is sys.argv and self.arguments is not None :
             return(self.arguments, self.options)
 
         def raise_error(text = ""):
@@ -107,48 +107,49 @@ class Parser:
             sys.stderr.write(self.help())
             sys.exit(1)
 
-        args = {}
-        opts = {}
-        nrml_args = self.__args
+        arguments = self.__args
         options = self.__opts
+        arg_values = {}
+        opts_values = {
+                o.name:o.default for o in options if o.default is not None}
 
         i = 1
         argindex = 0 # Index of the current argument, excluding options
-        while i < len(arguments):
-            arg = arguments[i]
+        while i < len(argument_list):
+            arg = argument_list[i]
             i += 1
             if arg[0] == '-':
                 try:
                     opt = next(o for o in options if o.name == arg[1:])
                 except StopIteration as _:
+                    raise_error(f"Unknown option {arg}")
 
-                    return None
                 opt_values = []
                 for opt_arg in opt.args:
-                    if i == len(arguments[i]):
-                        raise_error("Missing option value {}.".format(arg))
-                    arg = arguments[i]
+                    if i == len(argument_list[i]):
+                        raise_error(f"Missing option value to {arg}")
+                    arg = argument_list[i]
                     i += 1
                     opt_values.append(opt_arg.type(arg) if opt_arg.type else arg)
 
-                opts[opt.name] = opt_values
+                opts_values[opt.name] = opt_values
                 continue
 
             # if it is a normal argument
-            if nrml_args[argindex].type is not None :
+            if arguments[argindex].type is not None :
                 try:
-                    arg = nrml_args[argindex]['type'](arg)
+                    arg = arguments[argindex]['type'](arg)
                 except ValueError as _:
-                    raise_error("Wrong type for {}.".format(nrml_args[argindex]))
-            args[nrml_args[argindex]['name']] = arg
+                    raise_error("Wrong type for {}.".format(arguments[argindex]))
+            arg_values[arguments[argindex]['name']] = arg
             argindex += 1
 
         indx = argindex
-        while indx < len(nrml_args):
-            if nrml_args[indx].required:
-                raise_error('Missing argument '+ nrml_args[indx].name)
-            if nrml_args[indx].default:
-                args[nrml_args[indx].name] = nrml_args[indx].default
+        while indx < len(arguments):
+            if arguments[indx].required:
+                raise_error('Missing argument '+ arguments[indx].name)
+            if arguments[indx].default:
+                arg_values[arguments[indx].name] = arguments[indx].default
             indx += 1
 
-        return (args,opts)
+        return (arg_values,opts_values)

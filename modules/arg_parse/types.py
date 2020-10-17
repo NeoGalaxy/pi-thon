@@ -17,3 +17,19 @@ class PositiveInt(NonNegInt):
         if number == 0 :
             raise ValueError('This should be a positive number.')
         return number
+
+class NonNegFloat(float):
+    """A none negative float"""
+    def __new__(cls, *args, **kargs):
+        number = float.__new__(cls, *args, **kargs)
+        if number < 0 :
+            raise ValueError('This should not be a negative number.')
+        return number
+
+class PositiveFloat(NonNegFloat):
+    """A none negative float"""
+    def __new__(cls, *args, **kargs):
+        number = NonNegFloat.__new__(cls, *args, **kargs)
+        if number == 0 :
+            raise ValueError('This should be a positive number.')
+        return number

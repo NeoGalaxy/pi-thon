@@ -34,7 +34,7 @@ def main():
     # Lance la simulation
     compteur = 0
     progress_bar = better_io.Progress(nombre_de_points,
-        pre_text = 'Génération des points : ', fps = 1)
+        pre_text = 'Génération des points : ')
 
     for index_val in range(0, nombre_de_points) :
         compteur += est_dans_unite(new_point())

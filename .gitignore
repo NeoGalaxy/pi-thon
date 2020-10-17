@@ -1,3 +1,9 @@
+######### Ajoutés à la main #########
+#Les images générées
+*.ppm
+*.gif
+
+######### Ajoutés Automatiquemennt #########
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

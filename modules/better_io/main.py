@@ -1,30 +1,32 @@
 """
-Module d'affichage de la progression
+Module made to enhance command-line display. Will maybe also enhance input in a
+close future
 """
 import os
 import sys
 import time
 import threading
-#from multiprocessing import shared_memory
 
-def get_cols():
-    """Gives the number of columns in the terminal"""
+def get_cols(default = 80):
+    """Return the number of columns in the terminal"""
     try:
         size = os.get_terminal_size()
         return size.columns
     except OSError:
-        return 80
+        return default
 
-def get_lines():
+def get_lines(default = 40):
     """Gives the number of lines in the terminal"""
     try:
         size = os.get_terminal_size()
         return size.lines
     except OSError:
-        return 40
+        return default
 
 class Progress:
-    """Creates a progressbar using a fork not to impact perfs"""
+    """
+    Creates a progressbar that uses a new thread in order to display itself.
+    """
     def __init__(self, end, pre_text = 'Loading : ', fps = 10, line = 0):
         # La valeur à affucher
         self.memory = 0
@@ -36,7 +38,8 @@ class Progress:
         self.end = end
         # Le texte avant la barre
         self.pre_text = pre_text
-        # Le fork, permettant de tourner deux codes en parallèle
+        # Un thread, pour minimiseer l'impact de la barre de progression
+        # sur la performance
         def child():
             sleeptime = 1/fps
             while not self.finished:
@@ -46,20 +49,23 @@ class Progress:
         thr = threading.Thread(target = child)
         thr.start()
 
-    def monter(self, nb_lignes = 1):
-        """Monte la barre de nb_lignes"""
+    def ascend(self, nb_lignes = 1):
+        """ascend the progressbar of nb_lines"""
         self.line += nb_lignes
 
-    def descendre(self, nb_lignes = 1):
-        """Descend la barre de nb_lignes"""
+    def descend(self, nb_lignes = 1):
+        """Descend the progressbar of nb_lines"""
         self.line -= nb_lignes
 
     def set(self, val):
-        """Sets the progress bar"""
+        """
+        Sets the progress bar value. 
+        One can also directy access self.memory. This second strategy is faster.
+        """
         self.memory = val
 
     def stop(self, clean = True):
-        """Stops the progress bar and kills the fork"""
+        """Stops the progress bar from running and kills the tread"""
         self.finished = True
         self.memory = self.end
         if clean:
@@ -68,12 +74,12 @@ class Progress:
             self.disp()
 
     def disp(self):
-        """Stops the progress bar and kills the fork"""
+        """Displays the progressbar"""
         disp_progress(self.memory, self.end,
             self.line, pre_text = self.pre_text)
 
 def disp_progress(index, total, line_nb, pre_text = ''):
-    """Affiche une barre de progression"""
+    """Displays a progressbar"""
     text = str(index) + '/' + str(total)
     width = get_cols() - 2 - len(text) - len(pre_text)
     progress_val = int(width * index / total)
@@ -82,8 +88,12 @@ def disp_progress(index, total, line_nb, pre_text = ''):
           +' '*(width - progress_val) + ']' + text, end = f'\033[u\r')
 
 def disp_clean(line = 0):
-    """Affiche une barre de progression"""
+    """Cleans the given line"""
     print(f'\033[s\033[{get_lines() - line};0f\033[K\033[u', end = '\r')
+
+def set_cursor(line = 0):
+    """Moves the cusor to given line"""
+    print(f'\033[{get_lines() - line};0f', end = '')
 
 if __name__ == '__main__':
     print()

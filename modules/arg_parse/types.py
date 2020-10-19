@@ -1,5 +1,5 @@
 """
-Définis des types pour le parseur
+Defines useful types for the pargument parser.
 """
 
 class NonNegInt(int):

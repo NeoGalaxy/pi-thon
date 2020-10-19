@@ -1,21 +1,37 @@
-"""Stupid Docstring"""
+"""
+Module for automatic command line arguments parsing, and automatic usage/help
+message generation.
+"""
 import sys
 
-class ArgumentError(ValueError):
-    """The error raised when an argument is invalid"""
+class ArgumentError(Exception):
+    """The error raised by the parsing function when an argument is invalid."""
+    def __init__(self, position, text, *args, **kargs):
+        self.position = position
+        self.text = text
+        Exception.__init__(self, *args, **kargs)
 
 class Arg:
-    """Argument definition parser"""
+    """
+    Parses a dict into an object describing an argument's properties.
+    The values that will be used are :
+      "name"(str) -> The name of the argument. Mandatory
+      "description" / "descr"(str) -> The description of what the argument does.
+      "type"(type) -> The type of the argument.
+      "required"/"req"(bool) -> Whether the argument is required or not.
+                                Defaults to True
+      "default"(any) -> The default value of the argument (if required == False)
+    """
     def __init__(self, **kargs):
         try:
             self.name = str(kargs['name'])
         except KeyError as err:
             raise ValueError('There is no valid name given') from err
-        self.desc = [str(line) for line in
+        self.descr = [str(line) for line in
             (kargs.get('description') or kargs.get('descr') or [])]
         self.type = kargs.get('type')
         if (self.type is not None and not isinstance(self.type,type)):
-            raise ValueError('When specified, the type should be a vaild type.')
+            raise ValueError('When specified, the type should be a valid type.')
         self.required = kargs['required'] if 'required' in kargs else \
                         kargs['req'] if 'req' in kargs else True
         self.default = kargs.get('default')
@@ -24,7 +40,7 @@ class Arg:
         if key == 'name':
             return self.name
         if key in ['descr', 'desc', 'description']:
-            return self.desc
+            return self.descr
         if key == 'type':
             return self.type
         if key in ['required', 'req']:
@@ -39,19 +55,35 @@ class Arg:
         return self.name
 
 class Opt(Arg):
-    """Option definition parser"""
+    """
+    Parses a dict into an object describing an option's properties.
+    The option differs in the way that it can be placed anywhere in the command
+    line, and its value may depend on the next arguments in the command line.
+    Note that the property "req"/"required" should have no impact since the
+    option is considered as non required, and will thus never throw an exception
+    on parsing if not specified.
+
+    Also, you should use 'args' instead of 'type'. It allows to specify the
+    number of arguments to the option, and their respective type.
+    Thus, 'args' has to be a list of Arg (or of dict that can be used to
+    initialize a Arg)
+
+    Additionally, there is value of key "effect". When specified, it should be a
+    function accepting the arguments specified in "args", and is executed when
+    the option of the same name is encountered. If its return value differs from
+    None, it will replace the value of the options when parsed.
+    """
     def __init__(self, **kargs):
         Arg.__init__(self, **kargs)
-        try:
-            self.nbr = int(kargs.get('nb') or 0)
-        except TypeError as err:
-            raise ValueError('The option argument number should be a int') from err
         self.args = [] if kargs.get('args') is None else \
             [x if isinstance(x, Arg) else Arg(**x) for x in kargs['args']]
+        self.effect = kargs.get('effect')
 
     def __getitem__(self, key):
         if key == 'args':
             return self.args
+        if key == 'effect':
+            return self.effect
         return Arg.__getitem__(self, key)
 
     def __str__(self):
@@ -59,8 +91,11 @@ class Opt(Arg):
 
 
 class Parser:
-    """Parse and manege command-line arguments"""
-    def __init__(self, arguments = None, options = None, descr = ""):
+    """
+    Class to parse a list of strings and interpret them as arguments.
+    To define arguments and options, give to its constructor
+    """
+    def __init__(self, arguments=None, options=None, descr="", parse_argv=True):
         self.__descr = str(descr)
         self.__args = [] if arguments is None else \
             [x if isinstance(x, Arg) else Arg(**x) for x in arguments]
@@ -68,76 +103,79 @@ class Parser:
             [x if isinstance(x, Opt) else Opt(**x) for x in options]
         self.arguments = None
         self.options = None
-        (self.arguments, self.options) = self.parse_arguments()
+        if parse_argv:
+            (self.arguments, self.options) = self.parse_arguments()
 
 
     def help(self):
-        """Returns the help of the command"""
+        """
+        Builds a help message and returns it.
+        The format of this help is the following :
+        Usage : <command> [OPTIONS] <args>...
+
+        Arguments :
+            <argument_name> <argument_description>
+
+        Options :
+            <option_name> <option_description>
+        """
+        # Usage
         text = 'Usage : '+sys.argv[0]
         if self.__opts != []:
-            text += " [OPTIONS]"
-        for opt in self.__args :
-            text += ' ' + str(opt)
+            text += " [OPTIONS]" + ''.join(f' {arg}' for arg in self.__args)
         if self.__descr != '' :
-            text += '\n' + self.__descr
+            text += f'\n{self.__descr}'
         text += '\n\n'
+        # Arguments
+        if self.__args != [] :
+            text += 'Arguments :\n'
+            for arg in self.__args:
+                text += f"  {arg.name}\t " \
+                    + ('\n   ' + ' '*len(arg.name)+'\t   ').join(arg.descr) \
+                    + '\n'
+            text += '\n'
+        # Options
         if self.__opts != [] :
             text += 'Options :\n'
             for opt in self.__opts:
-                text += '  -'+opt.name+'\t '
-                text += ('\n   ' + ' '*len(opt['name'])+'\t   ').join(opt['descr'])
-                text += '\n'
-            text += '\n'
-
-        if self.__args != [] :
-            text += 'Arguments :\n'
-            for opt in self.__args:
-                text += '  '+opt['name']+'\t '
-                text += ('\n   ' + ' '*len(opt['name'])+'\t   ').join(opt['descr'])
-                text += '\n'
+                profile = f'  -{opt.name}{"".join(f" <{a.name}>" for a in opt.args)}'
+                text += profile+'\t ' \
+                    + ('\n   ' + ' '*len(profile)+'\t   ').join(opt.descr) \
+                    + '\n'
             text += '\n'
         return text
 
-    def __mk_error(self, position, text = ""):
-        sys.stderr.write("\u001b[31mError at argument"
-            + f" position {position}:\u001b[0m\n")
-        sys.stderr.write(('\u001b[33;1m'+text+"\u001b[0m\n\n"))
-        sys.stderr.write(self.help())
-        return ArgumentError(text)
-
-    def parse_one_opt(self, opt_name, i, arglist, opts_values):
+    def __parse_opt(self, opt_name, i, arglist, opts_values):
         try:
             opt = next(o for o in self.__opts if o.name == opt_name)
-        except StopIteration as _:
-            raise self.__mk_error(i, f"Unknown option {opt_name}")
+        except StopIteration as err:
+            raise ArgumentError(i, f"Unknown option {opt_name}") from err
 
-        opt_values = []
+        opt_argv = []
         for opt_arg in opt.args:
             if i == len(arglist[i]):
-                raise self.__mk_error(i,
-                    f"Missing option value to {arg}")
+                raise ArgumentError(i, f"Missing option value to {arg}")
             arg = arglist[i]
             i += 1
-            opt_values.append(opt_arg.type(arg) if opt_arg.type else arg)
-
-        opts_values[opt.name] = opt_values
+            opt_argv.append(opt_arg.type(arg) if opt_arg.type else arg)
+        if opt.effect is not None:
+            ret = opt.effect(*opt_argv)
+            if ret is not None:
+                opt_argv = ret
+        opts_values[opt.name] = opt_argv
         return i
 
-    def parse_one_arg(self, arg_value, i, arg_props, arg_values):
-        if arg_props.type is not None :
-            try:
-                arg_value = arg_props.type(arg_value)
-            except Exception as err:
-                raise self.__mk_error(i,
-                    f"Wrong type for {arg_props}.") from err
-        arg_values[arg_props.name] = arg_value
-
     def parse_arguments(self, argument_list = None):
-        """Parse the argument_list"""
+        """
+        Parse argument_list into a tuple of an argument dict
+        and an option dict. If the argument/option is specified
+        or has a default value, it will be present in the corresponding
+        dict with its name as key. If an option has "effect" specified, its
+        value in the dict will instead be the return value of "effect"
+        (if not None).
+        """
         if argument_list is None:
             argument_list = sys.argv
-        if argument_list is sys.argv and self.arguments is not None :
-            return(self.arguments, self.options)
 
         arguments = self.__args
         options = self.__opts
@@ -154,20 +192,38 @@ class Parser:
                 i += 1 # Permet de modifier i dans le parse des options
 
                 if arg[0] == '-':
-                    i = self.parse_one_opt(arg[1:], i, argument_list, opts_values)
+                    i = self.__parse_opt(arg[1:], i, argument_list, opts_values)
                     continue
 
                 if argindex >= len(arguments):
-                    raise self.__mk_error(i,
+                    raise ArgumentError(i,
                         f"Too many arguments : don't know what to do of {arg}")
-                self.parse_one_arg(arg, i, arguments[argindex], arg_values)
+                #self.__parse_arg(arg, i, arguments[argindex], arg_values)
+                if arguments[argindex].type is not None :
+                    try:
+                        arg = arguments[argindex].type(arg)
+                    except Exception as err:
+                        raise ArgumentError(i, f"Wrong type for {arguments[argindex]}.") from err
+                arg_values[arguments[argindex].name] = arg
                 argindex += 1
             for arg_props in arguments[argindex:]:
                 if arg_props.required:
-                    raise self.__mk_error(i, f'Missing argument {arg_props.name}')
+                    raise ArgumentError(i, f'Missing argument {arg_props.name}')
                 if arg_props.default:
                     arg_values[arg_props.name] = arg_props.default
-        except ArgumentError:
-            sys.exit(1)
+        except ArgumentError as error:
+            if error.position == 0:
+                print(self.help())
+                sys.exit(0)
+            else:
+                sys.stderr.write("\u001b[31mError at argument"
+                                f" position {error.position}:\u001b[0m\n")
+                sys.stderr.write((f"\u001b[33;1m{error.text}\u001b[0m\n\n"))
+                sys.stderr.write(self.help())
+                sys.exit(1)
 
         return (arg_values,opts_values)
+
+def disp_help():
+    """When called within an arg parsing, results in displaying the help"""
+    raise ArgumentError(0,'')
